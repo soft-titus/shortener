@@ -42,7 +42,7 @@ jobs:
 
       - name: Get branch name
         id: branchname
-        run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+        run: echo "branch_name=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_ENV
 
       - name: Determine branch-based version
         id: version
