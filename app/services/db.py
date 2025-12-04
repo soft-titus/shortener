@@ -1,10 +1,11 @@
 """
-database service module with Postgres.
+Database service module with Postgres.
 """
 
-import os
 import logging
-from psycopg2 import pool, OperationalError
+from psycopg2 import pool, OperationalError, errors
+
+from app import config
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,11 @@ class PostgresDB:
                 cls._pool = pool.SimpleConnectionPool(
                     minconn=1,
                     maxconn=20,
-                    host=os.getenv("POSTGRES_HOST", "postgres"),
-                    port=int(os.getenv("POSTGRES_PORT", "5432")),
-                    dbname=os.getenv("POSTGRES_DB", "shortener"),
-                    user=os.getenv("POSTGRES_USER", "postgres"),
-                    password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+                    host=config.POSTGRES_HOST,
+                    port=config.POSTGRES_PORT,
+                    dbname=config.POSTGRES_DB,
+                    user=config.POSTGRES_USER,
+                    password=config.POSTGRES_PASSWORD,
                 )
                 logger.info("Postgres connection pool initialized")
             except OperationalError as e:
@@ -57,5 +58,93 @@ class PostgresDB:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
             logger.info("Postgres health check successful")
+        finally:
+            pool_instance.putconn(conn)
+
+    @classmethod
+    def original_url_exists(cls, original_url: str) -> bool | None:
+        """
+        Check if the original URL already exists in database.
+
+        Args:
+            original_url (str): The original URL to look up.
+
+        Returns:
+            bool : True if exists, else False.
+        """
+        pool_instance = cls.get_pool()
+        conn = pool_instance.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT original_url FROM short_urls WHERE original_url = %s",
+                    (original_url,),
+                )
+                row = cur.fetchone()
+                return bool(row)
+        finally:
+            pool_instance.putconn(conn)
+
+    @classmethod
+    def insert_short_url(cls, short_code: str, original_url: str) -> str:
+        """
+        Insert a new short URL into the database.
+
+        Args:
+            short_code (str): The generated short code.
+            original_url (str): The original URL to store.
+
+        Returns:
+            short_code (str): The inserted short code.
+
+        Raises:
+            psycopg2.OperationalError if DB insertion fails.
+        """
+        pool_instance = cls.get_pool()
+        conn = pool_instance.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO short_urls (short_code, original_url)
+                    VALUES (%s, %s)
+                    RETURNING short_code
+                    """,
+                    (short_code, original_url),
+                )
+                conn.commit()
+                logger.info("Inserted short URL: %s -> %s", short_code, original_url)
+                return short_code
+        except errors.UniqueViolation:  # pylint: disable=no-member
+            conn.rollback()
+            raise
+        except OperationalError as e:
+            conn.rollback()
+            logger.error("DB error while inserting short URL: %s", e)
+            raise e
+        finally:
+            pool_instance.putconn(conn)
+
+    @classmethod
+    def get_original_url(cls, short_code: str) -> str | None:
+        """
+        Retrieve the original URL for a given short code.
+
+        Args:
+            short_code (str): The short code to look up.
+
+        Returns:
+            str | None: Original URL if found, else None.
+        """
+        pool_instance = cls.get_pool()
+        conn = pool_instance.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT original_url FROM short_urls WHERE short_code = %s",
+                    (short_code,),
+                )
+                row = cur.fetchone()
+                return row[0] if row else None
         finally:
             pool_instance.putconn(conn)

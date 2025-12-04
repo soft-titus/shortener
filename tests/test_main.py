@@ -9,5 +9,5 @@ client = TestClient(app)
 def test_health_route_registered():
     """Verify that /health endpoint is registered in the main app."""
     response = client.get("/health")
-    # We don't care about dependency failures here, just the route existing.
+
     assert response.status_code in (200, 503)

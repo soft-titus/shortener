@@ -4,7 +4,7 @@ Tests for the Postgres database service (services/db.py).
 
 from unittest.mock import patch, MagicMock
 import pytest
-from psycopg2 import OperationalError
+from psycopg2 import OperationalError, errors
 from app.services.db import PostgresDB
 
 
@@ -70,3 +70,119 @@ def test_check_health_failure_query_error():
     with patch.object(PostgresDB, "_pool", mock_pool):
         with pytest.raises(OperationalError):
             PostgresDB.check_health()
+
+
+def test_original_url_exists_true():
+    """Test that original_url_exists returns True when the URL is found."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.fetchone.return_value = ["https://example.com"]
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        exists = PostgresDB.original_url_exists("https://example.com")
+        assert exists is True
+        mock_cursor.execute.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_original_url_exists_false():
+    """Test that original_url_exists returns False when the URL is not found."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.fetchone.return_value = None
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        exists = PostgresDB.original_url_exists("https://example.com")
+        assert exists is False
+        mock_cursor.execute.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_insert_short_url_success():
+    """Test that insert_short_url successfully inserts a short URL and returns the short code."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.fetchone.return_value = ["short123"]
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        short_code = PostgresDB.insert_short_url("short123", "https://example.com")
+        assert short_code == "short123"
+        mock_cursor.execute.assert_called_once()
+        mock_conn.commit.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_insert_short_url_unique_violation():
+    """Test insert_short_url raises UniqueViolation and rolls back."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.execute.side_effect = (
+        errors.UniqueViolation  # pylint: disable=no-member
+    )
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        with pytest.raises(errors.UniqueViolation):  # pylint: disable=no-member
+            PostgresDB.insert_short_url("short123", "https://example.com")
+        mock_conn.rollback.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_insert_short_url_operational_error():
+    """Test insert_short_url raises OperationalError and rolls back."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    op_err = OperationalError("DB down")
+    mock_cursor.execute.side_effect = op_err
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        with pytest.raises(OperationalError):
+            PostgresDB.insert_short_url("short123", "https://example.com")
+        mock_conn.rollback.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_get_original_url_found():
+    """Test get_original_url returns the URL when found."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.fetchone.return_value = ["https://example.com"]
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        result = PostgresDB.get_original_url("short123")
+        assert result == "https://example.com"
+        mock_cursor.execute.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_get_original_url_not_found():
+    """Test get_original_url returns None when not found."""
+    mock_conn = MagicMock()
+    mock_cursor = mock_conn.cursor.return_value.__enter__.return_value
+    mock_cursor.fetchone.return_value = None
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        result = PostgresDB.get_original_url("short123")
+        assert result is None
+        mock_cursor.execute.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)

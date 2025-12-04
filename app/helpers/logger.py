@@ -4,9 +4,8 @@ This module exposes a configured logger used across the application.
 """
 
 import logging
-import os
 
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+from app.config import LOG_LEVEL
 
 logging.basicConfig(
     level=LOG_LEVEL,

@@ -6,7 +6,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.routes.health import router
+from app.routes.health_routes import router
 from app.services.cache import RedisClient
 from app.services.db import PostgresDB
 

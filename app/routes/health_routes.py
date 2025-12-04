@@ -10,7 +10,41 @@ from app.services.cache import RedisClient
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="Health check for all dependencies",
+    responses={
+        200: {
+            "description": "All dependencies are healthy.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "ok",
+                        "redis": "connected",
+                        "postgres": "connected",
+                    }
+                }
+            },
+        },
+        503: {
+            "description": "One or more dependencies are unreachable.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "redis_down": {
+                            "summary": "Redis unreachable",
+                            "value": {"detail": "Redis: not connected"},
+                        },
+                        "postgres_down": {
+                            "summary": "Postgres unreachable",
+                            "value": {"detail": "Postgres: not connected"},
+                        },
+                    }
+                }
+            },
+        },
+    },
+)
 def health():
     """
     Health check endpoint ensuring dependencies are reachable.
