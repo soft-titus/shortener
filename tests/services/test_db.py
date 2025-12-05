@@ -186,3 +186,74 @@ def test_get_original_url_not_found():
         assert result is None
         mock_cursor.execute.assert_called_once()
         mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_increment_visits_bulk_success():
+    """Test that increment_visits_bulk executes a bulk update and commits with correct params."""
+    visit_data = {"short1": 5, "short2": 3}
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_conn.cursor.return_value = mock_cursor
+
+    # Mock mogrify to return a bytes string
+    def mogrify_side_effect(query, params):
+        # Ensure mogrify receives correct arguments
+        assert query == "(%s, %s)"
+        assert params[0] in visit_data
+        assert params[1] == visit_data[params[0]]
+        return f"('{params[0]}', {params[1]})".encode("utf-8")
+
+    mock_cursor.mogrify.side_effect = mogrify_side_effect
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        PostgresDB.increment_visits_bulk(visit_data)
+
+        mock_cursor.execute.assert_called_once()
+        executed_sql = mock_cursor.execute.call_args[0][0]
+        for short_code, count in visit_data.items():
+            assert short_code in executed_sql
+            assert str(count) in executed_sql
+
+        mock_conn.commit.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_increment_visits_bulk_operational_error():
+    """Test that increment_visits_bulk rolls back on OperationalError."""
+    visit_data = {"short1": 5, "short2": 3}
+
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_conn.cursor.return_value = mock_cursor
+
+    # Mock mogrify to return a bytes string
+    def mogrify_side_effect(_query, params):
+        return f"('{params[0]}', {params[1]})".encode("utf-8")
+
+    mock_cursor.mogrify.side_effect = mogrify_side_effect
+    mock_cursor.execute.side_effect = OperationalError("DB down")
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        with pytest.raises(OperationalError):
+            PostgresDB.increment_visits_bulk(visit_data)
+
+        mock_conn.rollback.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_increment_visits_bulk_empty_dict():
+    """Test that increment_visits_bulk does nothing if visit_data is empty."""
+    mock_pool = MagicMock()
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        PostgresDB.increment_visits_bulk({})
+        # getconn should not be called for empty dict
+        mock_pool.getconn.assert_not_called()

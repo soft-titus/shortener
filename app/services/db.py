@@ -148,3 +148,42 @@ class PostgresDB:
                 return row[0] if row else None
         finally:
             pool_instance.putconn(conn)
+
+    @classmethod
+    def increment_visits_bulk(cls, visit_data: dict[str, int]) -> None:
+        """
+        Bulk increment 'visits' for multiple short codes in a single query.
+
+        Args:
+            visit_data (dict[str, int]): Mapping of short_code -> visit_count.
+
+        Raises:
+            OperationalError: If DB operation fails.
+        """
+        if not visit_data:
+            return
+
+        pool_instance = cls.get_pool()
+        conn = pool_instance.getconn()
+        try:
+            with conn.cursor() as cur:
+                values_str = ",".join(
+                    cur.mogrify("(%s, %s)", (short_code, count)).decode("utf-8")
+                    for short_code, count in visit_data.items()
+                )
+                sql = f"""
+                    UPDATE short_urls AS s
+                    SET visits = s.visits + v.count
+                    FROM (VALUES {values_str}) AS v(short_code, count)
+                    WHERE s.short_code = v.short_code
+                """
+                cur.execute(sql)
+
+            conn.commit()
+            logger.info("Bulk incremented visits for %d short codes", len(visit_data))
+        except OperationalError as e:
+            conn.rollback()
+            logger.error("Failed to bulk increment visits: %s", e)
+            raise e
+        finally:
+            pool_instance.putconn(conn)
