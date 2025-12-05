@@ -117,20 +117,25 @@ def test_shorten_url_insert_operational_error():
 
 def test_resolve_short_code_cache_hit():
     """resolve_short_code returns original URL from cache."""
-    with patch("app.services.shortener.RedisClient.get_client") as mock_client:
+    with patch("app.services.shortener.RedisClient.get_client") as mock_client, patch(
+        "app.services.shortener.RedisClient.increment_visit_count"
+    ) as mock_inc:
         redis_instance = MagicMock()
         redis_instance.get.return_value = "http://example.com"
         mock_client.return_value = redis_instance
 
         original = ShortenerService.resolve_short_code("abcd1234")
         assert original == "http://example.com"
+        mock_inc.assert_called_once_with("abcd1234")
 
 
 def test_resolve_short_code_db_hit():
     """resolve_short_code returns original URL from DB if cache miss."""
     with patch("app.services.shortener.RedisClient.get_client") as mock_client, patch(
         "app.services.shortener.PostgresDB"
-    ) as mock_db:
+    ) as mock_db, patch(
+        "app.services.shortener.RedisClient.increment_visit_count"
+    ) as mock_inc:
 
         redis_instance = MagicMock()
         redis_instance.get.return_value = None
@@ -139,6 +144,7 @@ def test_resolve_short_code_db_hit():
 
         original = ShortenerService.resolve_short_code("abcd1234")
         assert original == "http://example.com"
+        mock_inc.assert_called_once_with("abcd1234")
 
 
 def test_resolve_short_code_not_found():

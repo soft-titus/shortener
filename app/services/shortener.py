@@ -127,6 +127,7 @@ class ShortenerService:
             client = RedisClient.get_client()
             cached = client.get(f"short:{short_code}")
             if cached:
+                RedisClient.increment_visit_count(short_code)
                 logger.info("Cache hit for short code: %s", short_code)
                 return cached
         except redis_exceptions.RedisError:
@@ -145,6 +146,7 @@ class ShortenerService:
         try:
             RedisClient.set_with_ttl(f"short:{short_code}", original)
             RedisClient.set_with_ttl(f"url:{original}", short_code)
+            RedisClient.increment_visit_count(short_code)
         except redis_exceptions.RedisError:
             logger.debug("Failed to cache mapping after DB resolve")
 
