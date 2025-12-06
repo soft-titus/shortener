@@ -31,7 +31,7 @@ jobs:
       - name: Get highest Git tag
         id: git_tag
         run: |
-          TAG=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -n 1)
+          TAG=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
           if [ -z "$TAG" ]; then
             echo "No tags found, defaulting to version 1.0.0"
             echo "tag=1.0.0" >> $GITHUB_ENV
