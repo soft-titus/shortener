@@ -3,8 +3,9 @@ Database service module with Postgres.
 """
 
 import logging
+from typing import Optional
 from psycopg2 import pool, OperationalError, errors
-
+from psycopg2.extras import RealDictCursor
 from app import config
 
 logger = logging.getLogger(__name__)
@@ -187,3 +188,33 @@ class PostgresDB:
             raise e
         finally:
             pool_instance.putconn(conn)
+
+    @classmethod
+    def get_short_url_stat(cls, short_code: str) -> Optional[dict]:
+        """
+        Fetch statistics for a given short code.
+
+        Args:
+            short_code (str): Short code to query.
+
+        Returns:
+            Optional[dict]: Dictionary with keys 'short_code', 'original_url',
+            'visits', 'created_at', or None if not found.
+        """
+        pool_instance = cls.get_pool()
+        conn = pool_instance.getconn()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT short_code, original_url, visits, created_at
+                    FROM short_urls
+                    WHERE short_code = %s
+                    """,
+                    (short_code,),
+                )
+                result = cur.fetchone()
+        finally:
+            pool_instance.putconn(conn)
+
+        return result

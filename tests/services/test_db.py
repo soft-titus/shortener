@@ -197,9 +197,7 @@ def test_increment_visits_bulk_success():
     mock_cursor.__enter__.return_value = mock_cursor
     mock_conn.cursor.return_value = mock_cursor
 
-    # Mock mogrify to return a bytes string
     def mogrify_side_effect(query, params):
-        # Ensure mogrify receives correct arguments
         assert query == "(%s, %s)"
         assert params[0] in visit_data
         assert params[1] == visit_data[params[0]]
@@ -232,7 +230,6 @@ def test_increment_visits_bulk_operational_error():
     mock_cursor.__enter__.return_value = mock_cursor
     mock_conn.cursor.return_value = mock_cursor
 
-    # Mock mogrify to return a bytes string
     def mogrify_side_effect(_query, params):
         return f"('{params[0]}', {params[1]})".encode("utf-8")
 
@@ -255,5 +252,49 @@ def test_increment_visits_bulk_empty_dict():
     mock_pool = MagicMock()
     with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
         PostgresDB.increment_visits_bulk({})
-        # getconn should not be called for empty dict
         mock_pool.getconn.assert_not_called()
+
+
+def test_get_short_url_stat_found():
+    """Test get_short_url_stat returns a dictionary when the short code exists."""
+    mock_result = {
+        "short_code": "short123",
+        "original_url": "https://example.com",
+        "visits": 10,
+        "created_at": "2025-12-05T09:00:00",
+    }
+
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = mock_result
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        result = PostgresDB.get_short_url_stat("short123")
+        assert result == mock_result
+        mock_cursor.execute.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
+
+
+def test_get_short_url_stat_not_found():
+    """Test get_short_url_stat returns None when the short code does not exist."""
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = None
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cursor
+
+    mock_pool = MagicMock()
+    mock_pool.getconn.return_value = mock_conn
+
+    with patch.object(PostgresDB, "get_pool", return_value=mock_pool):
+        result = PostgresDB.get_short_url_stat("missing")
+        assert result is None
+        mock_cursor.execute.assert_called_once()
+        mock_pool.putconn.assert_called_once_with(mock_conn)
