@@ -23,7 +23,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Running pytest..."
-python -m pytest $STAGED_FILES
+python -m pytest -vvv --cov=app --cov-report=term-missing
 if [ $? -ne 0 ]; then
   echo "Tests failed."
   exit 1

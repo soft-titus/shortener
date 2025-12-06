@@ -17,30 +17,46 @@ class PostgresDB:
     """
 
     _pool: pool.SimpleConnectionPool | None = None
+    _read_pool: pool.SimpleConnectionPool | None = None
 
     @classmethod
-    def get_pool(cls) -> pool.SimpleConnectionPool:
+    def get_pool(cls, readonly: bool = False) -> pool.SimpleConnectionPool:
         """
         Get the Postgres connection pool instance.
         Initializes the pool if it hasn't been created yet.
+
+        Args:
+            readonly (bool): whether to get read/write pool or readonly only pool, default is False
         """
-        if cls._pool is None:
+        target_pool = "_read_pool" if readonly else "_pool"
+        if getattr(cls, target_pool) is None:
             try:
-                cls._pool = pool.SimpleConnectionPool(
-                    minconn=1,
-                    maxconn=20,
-                    host=config.POSTGRES_HOST,
-                    port=config.POSTGRES_PORT,
-                    dbname=config.POSTGRES_DB,
-                    user=config.POSTGRES_USER,
-                    password=config.POSTGRES_PASSWORD,
+                host = (
+                    config.POSTGRES_READONLY_HOST if readonly else config.POSTGRES_HOST
                 )
-                logger.info("Postgres connection pool initialized")
+                setattr(
+                    cls,
+                    target_pool,
+                    pool.SimpleConnectionPool(
+                        minconn=1,
+                        maxconn=20,
+                        host=host,
+                        port=config.POSTGRES_PORT,
+                        dbname=config.POSTGRES_DB,
+                        user=config.POSTGRES_USER,
+                        password=config.POSTGRES_PASSWORD,
+                    ),
+                )
+                logger.info(
+                    "Postgres %s pool initialized (host=%s)",
+                    "read-only" if readonly else "write",
+                    host,
+                )
             except OperationalError as e:
                 logger.error("Failed to create Postgres pool: %s", e)
-                cls._pool = None
+                setattr(cls, target_pool, None)
                 raise e
-        return cls._pool
+        return getattr(cls, target_pool)
 
     @classmethod
     def check_health(cls) -> None:
@@ -201,7 +217,7 @@ class PostgresDB:
             Optional[dict]: Dictionary with keys 'short_code', 'original_url',
             'visits', 'created_at', or None if not found.
         """
-        pool_instance = cls.get_pool()
+        pool_instance = cls.get_pool(readonly=True)
         conn = pool_instance.getconn()
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:

@@ -9,6 +9,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8080")
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+POSTGRES_READONLY_HOST = os.getenv("POSTGRES_READONLY_HOST", POSTGRES_HOST)
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
