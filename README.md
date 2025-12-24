@@ -84,11 +84,15 @@ python -m pylint /*.py
 - `build-and-publish-production-docker-image.yaml` : Builds production
   images on `main`
 
+---
+
 ### Branch Builds
 
 Branch-specific Docker images are built with timestamped tags.  
 
 Example: `1.0.0-dev-1762431`
+
+---
 
 ### Production Builds
 
