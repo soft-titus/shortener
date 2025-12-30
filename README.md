@@ -70,8 +70,8 @@ python -m pytest -v
 Check code formatting and linting:
 
 ```bash
-python -m black --check .
-python -m pylint /*.py
+python -m black --check ./
+python -m pylint app/ tests/
 ```
 
 ---
